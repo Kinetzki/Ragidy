@@ -1,0 +1,9 @@
+langchain
+langchain_core
+langchain_openai
+langchain_redis
+langchain_community
+pypdf
+redis
+fastapi
+uvicorn
