@@ -8,22 +8,30 @@ from langchain.chains.combine_documents.stuff import create_stuff_documents_chai
 from langchain.chains.retrieval import create_retrieval_chain
 from langchain_core.messages import SystemMessage, HumanMessage, AIMessage
 from langchain.callbacks import AsyncIteratorCallbackHandler
+from langchain_core.callbacks import UsageMetadataCallbackHandler
+
+class TokenUsageHandler(UsageMetadataCallbackHandler):
+    def __init__(self):
+        super().__init__()
 
 class StreamHandler(AsyncIteratorCallbackHandler):
     def __init__(self):
+        super().__init__()
         self.answer_started = False
         self.done = False
         self.title = []
+        self.buffer = []
     
-    def on_llm_start(self, serialized, prompts, **kwargs):
+    async def on_llm_start(self, serialized, prompts, **kwargs):
         pass
     
-    def on_llm_end(self, response, **kwargs):
+    async def on_llm_end(self, response, **kwargs):
+        print(response)
         self.answer_started = True
     
-    def on_llm_new_token(self, token, **kwargs):
+    async def on_llm_new_token(self, token, **kwargs):
         if self.answer_started:
-            print(token)
+            self.buffer.append(token)
         else:
             self.title.append(token)
     
@@ -75,7 +83,7 @@ class Ragidy:
         vector_store: RedisVectorStore,
         llm: str = "gpt-5"
     ):
-        rewriter_llm = ChatOpenAI(model=llm, temperature=0.0)
+        rewriter_llm = ChatOpenAI(model=llm, temperature=0.0, stream_usage=True)
         retriever = vector_store.as_retriever(
             search_type= "similarity",
             search_kwargs={"k": 5})
@@ -98,7 +106,7 @@ class Ragidy:
         return history_retriever
     
     def create_doc_chain(self, llm: str = "gpt-5"):
-        doc_llm = ChatOpenAI(model=llm, temperature=0, max_completion_tokens=1000)
+        doc_llm = ChatOpenAI(model=llm, temperature=0, max_completion_tokens=1000, stream_usage=True)
         
         prompt_answer = ChatPromptTemplate.from_messages([
             (
@@ -150,17 +158,23 @@ class Ragidy:
     
     async def stream_answer(self, question: str, retrieval_chain, chat_history: RedisChatMessageHistory, system_prompt: str | list[str]):
         messages = chat_history.messages
-        messages = [SystemMessage(content=system_prompt), *messages]
+        messages = [SystemMessage(content=system_prompt), *messages[-5:]]
        
         handler = StreamHandler()
+        token_handler = TokenUsageHandler()
         
         async for chunk in retrieval_chain.astream(
             {
                 "input": question,
                 "chat_history": messages
             },
-            config={"callbacks": [handler]}
+            config={"callbacks": [handler, token_handler]}
             ):
-            pass
+            if "answer" in chunk:
+                yield chunk["answer"]
         
-        print("".join(handler.title))
+        title = "".join(handler.title)
+        response = "".join(handler.buffer)
+        
+        print(response)
+        print(token_handler.usage_metadata)

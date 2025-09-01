@@ -29,13 +29,15 @@ async def main():
         #     retrieval_chain=retrieval_chain,
         #     chat_history=chat_history,
         #     system_prompt=system_persona)
-        
+         
         # print(result)
-        await ReliaAgent.stream_answer(
+        async for chunk in ReliaAgent.stream_answer(
             question=question,
             retrieval_chain=retrieval_chain,
             chat_history=chat_history,
             system_prompt=system_persona
-        )
+        ):
+            print(chunk, end="", flush=True)
+        print()
 
 asyncio.run(main())
