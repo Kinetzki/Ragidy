@@ -22,12 +22,12 @@ class StreamHandler(AsyncIteratorCallbackHandler):
         self.title = []
         self.buffer = []
     
-    async def on_llm_start(self, serialized, prompts, **kwargs):
-        pass
-    
+    async def on_llm_start(self, serialized, prompts, tags, **kwargs):
+        if "answer" in tags:
+            self.answer_started = True
+            
     async def on_llm_end(self, response, **kwargs):
-        print(response)
-        self.answer_started = True
+        return None
     
     async def on_llm_new_token(self, token, **kwargs):
         if self.answer_started:
@@ -83,7 +83,7 @@ class Ragidy:
         vector_store: RedisVectorStore,
         llm: str = "gpt-5"
     ):
-        rewriter_llm = ChatOpenAI(model=llm, temperature=0.0, stream_usage=True)
+        rewriter_llm = ChatOpenAI(model=llm, temperature=0.0, stream_usage=True, tags=["rewriter"])
         retriever = vector_store.as_retriever(
             search_type= "similarity",
             search_kwargs={"k": 5})
@@ -106,7 +106,7 @@ class Ragidy:
         return history_retriever
     
     def create_doc_chain(self, llm: str = "gpt-5"):
-        doc_llm = ChatOpenAI(model=llm, temperature=0, max_completion_tokens=1000, stream_usage=True)
+        doc_llm = ChatOpenAI(model=llm, temperature=0, max_completion_tokens=1000, stream_usage=True, tags=["answer"])
         
         prompt_answer = ChatPromptTemplate.from_messages([
             (
@@ -176,5 +176,6 @@ class Ragidy:
         title = "".join(handler.title)
         response = "".join(handler.buffer)
         
+        print(title)
         print(response)
         print(token_handler.usage_metadata)
